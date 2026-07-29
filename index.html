@@ -1,0 +1,1143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Form Clipper — extract photo &amp; signatures</title>
+<style>
+  :root{
+    --paper:#f2ede2;
+    --paper-dark:#e7ded0;
+    --ink:#22303a;
+    --ink-soft:#5b6b73;
+    --line:#c9bfa8;
+    --stamp-red:#a8402f;
+    --stamp-blue:#2b5b73;
+    --stamp-green:#3f6b4a;
+    --white:#fffdf8;
+    --mono: 'Courier New', ui-monospace, SFMono-Regular, Menlo, monospace;
+    --serif: Georgia, 'Times New Roman', serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:
+      radial-gradient(1200px 700px at 10% -10%, #fbf8ef 0%, var(--paper) 55%),
+      var(--paper);
+    color:var(--ink);
+    font-family:var(--serif);
+    min-height:100vh;
+    padding:28px 18px 60px;
+  }
+  .wrap{max-width:1100px;margin:0 auto;}
+
+  header{
+    display:flex;
+    align-items:flex-end;
+    justify-content:space-between;
+    gap:20px;
+    border-bottom:2px solid var(--ink);
+    padding-bottom:14px;
+    margin-bottom:26px;
+    flex-wrap:wrap;
+  }
+  .brand{display:flex;align-items:baseline;gap:12px;}
+  .brand .stamp{
+    font-family:var(--mono);
+    font-size:11px;
+    letter-spacing:2px;
+    color:var(--stamp-red);
+    border:1.5px solid var(--stamp-red);
+    padding:3px 8px;
+    border-radius:3px;
+    transform:rotate(-4deg);
+    text-transform:uppercase;
+  }
+  h1{
+    font-size:28px;
+    margin:0;
+    letter-spacing:0.3px;
+    font-weight:700;
+  }
+  .subtitle{
+    font-family:var(--mono);
+    font-size:12.5px;
+    color:var(--ink-soft);
+    max-width:320px;
+    text-align:right;
+    line-height:1.5;
+  }
+
+  .panel{
+    background:var(--white);
+    border:1px solid var(--line);
+    border-radius:2px;
+    box-shadow:0 1px 0 var(--line), 0 8px 24px -18px rgba(0,0,0,0.4);
+  }
+
+  /* Upload zone */
+  #dropzone{
+    padding:44px 24px;
+    text-align:center;
+    cursor:pointer;
+    border:2px dashed var(--line);
+    transition:border-color .15s, background .15s;
+  }
+  #dropzone.drag{
+    border-color:var(--stamp-blue);
+    background:#f3f7f8;
+  }
+  #dropzone .icon{
+    font-size:34px;
+    margin-bottom:10px;
+    color:var(--ink-soft);
+  }
+  #dropzone p{margin:4px 0;color:var(--ink-soft);font-family:var(--mono);font-size:13px;}
+  #dropzone .cta{
+    font-family:var(--serif);
+    font-size:17px;
+    font-weight:700;
+    color:var(--ink);
+  }
+  #fileInput{display:none;}
+
+  .upload-actions{
+    display:flex;
+    gap:12px;
+    margin-bottom:14px;
+    flex-wrap:wrap;
+  }
+  .upload-actions button{flex:1;min-width:220px;}
+
+  #qrSendBtn{
+    background:var(--stamp-blue);
+    color:#fff;
+    border:none;
+  }
+
+  /* Workspace */
+  #workspace{display:none;}
+  .toolbar{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:14px;
+    flex-wrap:wrap;
+    margin-bottom:14px;
+  }
+  .legend{
+    display:flex;
+    gap:16px;
+    flex-wrap:wrap;
+    font-family:var(--mono);
+    font-size:12px;
+    color:var(--ink-soft);
+  }
+  .legend .item{display:flex;align-items:center;gap:6px;}
+  .swatch{width:12px;height:12px;border-radius:2px;display:inline-block;border:1.5px solid rgba(0,0,0,0.25);}
+  .sw-photo{background:var(--stamp-blue);}
+  .sw-student{background:var(--stamp-red);}
+  .sw-parent{background:var(--stamp-green);}
+
+  button{
+    font-family:var(--mono);
+    font-size:12.5px;
+    letter-spacing:0.5px;
+    text-transform:uppercase;
+    background:var(--ink);
+    color:var(--white);
+    border:none;
+    padding:9px 14px;
+    border-radius:2px;
+    cursor:pointer;
+  }
+  button.secondary{
+    background:transparent;
+    color:var(--ink);
+    border:1.5px solid var(--ink);
+  }
+  button:hover{opacity:0.85;}
+  button:disabled{opacity:0.35;cursor:not-allowed;}
+
+  .stage-outer{
+    padding:18px;
+    overflow:auto;
+    background:
+      repeating-linear-gradient(45deg, #eee7d6 0 2px, transparent 2px 14px);
+    display:flex;
+    justify-content:center;
+  }
+  #stage{
+    position:relative;
+    line-height:0;
+    background:#fff;
+    box-shadow:0 2px 18px rgba(0,0,0,0.25);
+  }
+  #baseImg{display:block;max-width:100%;height:auto;user-select:none;-webkit-user-drag:none;}
+
+  .box{
+    position:absolute;
+    border:2px solid;
+    background:rgba(255,255,255,0.06);
+    cursor:move;
+  }
+  .box .label{
+    position:absolute;
+    top:-22px;
+    left:-2px;
+    font-family:var(--mono);
+    font-size:10.5px;
+    text-transform:uppercase;
+    letter-spacing:0.5px;
+    padding:2px 6px;
+    color:#fff;
+    white-space:nowrap;
+    border-radius:2px 2px 0 0;
+  }
+  .box-photo{border-color:var(--stamp-blue);}
+  .box-photo .label{background:var(--stamp-blue);}
+  .box-student{border-color:var(--stamp-red);}
+  .box-student .label{background:var(--stamp-red);}
+  .box-parent{border-color:var(--stamp-green);}
+  .box-parent .label{background:var(--stamp-green);}
+
+  .handle{
+    position:absolute;
+    width:14px;
+    height:14px;
+    background:#fff;
+    border:2px solid var(--ink);
+    border-radius:50%;
+    right:-8px;
+    bottom:-8px;
+    cursor:nwse-resize;
+  }
+
+  .results{
+    display:grid;
+    grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));
+    gap:16px;
+    margin-top:20px;
+  }
+  .result-card{
+    padding:14px;
+    text-align:center;
+  }
+  .result-card h3{
+    font-family:var(--mono);
+    font-size:11.5px;
+    text-transform:uppercase;
+    letter-spacing:1px;
+    margin:0 0 10px;
+    color:var(--ink-soft);
+  }
+  .result-card canvas{
+    max-width:100%;
+    border:1px solid var(--line);
+    background:repeating-conic-gradient(#f4f0e5 0% 25%, #fff 0% 50%) 50% / 16px 16px;
+  }
+  .result-card button{margin-top:10px;width:100%;}
+
+  .zip-bar{
+    margin-top:18px;
+    padding:14px 16px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:14px;
+    flex-wrap:wrap;
+  }
+  .zip-bar .zip-note{
+    font-family:var(--mono);
+    font-size:11.5px;
+    color:var(--ink-soft);
+  }
+  #zipAllBtn{
+    background:var(--stamp-green);
+    white-space:nowrap;
+  }
+  #changeFolderLink{
+    font-family:var(--mono);
+    font-size:11px;
+    color:var(--ink-soft);
+    text-decoration:underline;
+    cursor:pointer;
+    display:none;
+    width:100%;
+    text-align:right;
+    margin-top:-6px;
+  }
+
+  footer{
+    margin-top:36px;
+    font-family:var(--mono);
+    font-size:11px;
+    color:var(--ink-soft);
+    text-align:center;
+  }
+
+  /* ---- QR modal (laptop side) ---- */
+  .modal-overlay{
+    display:none;
+    position:fixed; inset:0;
+    background:rgba(20,20,30,0.55);
+    z-index:1000;
+    align-items:center;
+    justify-content:center;
+    padding:16px;
+  }
+  .modal-panel{
+    background:var(--white);
+    border:1px solid var(--line);
+    max-width:320px;
+    width:100%;
+  }
+  .modal-head{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    padding:10px 14px;
+    background:var(--ink);
+    color:var(--paper);
+    font-family:var(--mono);
+    font-size:11px;
+    letter-spacing:1.5px;
+    text-transform:uppercase;
+  }
+  .modal-head button{
+    background:none; border:none; color:var(--paper);
+    font-size:18px; line-height:1; cursor:pointer; padding:0;
+  }
+  #qrCanvasWrap{padding:20px; text-align:center;}
+  #qrCanvasWrap canvas{max-width:100%;}
+  #qrStatus{
+    padding:0 16px 18px;
+    font-family:var(--mono);
+    font-size:12px;
+    color:var(--ink-soft);
+    text-align:center;
+    line-height:1.5;
+  }
+
+  /* ---- phone sender mode (full takeover) ---- */
+  body.phone-mode .wrap{display:none;}
+  #phoneSendOverlay{
+    display:none;
+    position:fixed; inset:0;
+    background:var(--paper);
+    z-index:1000;
+    align-items:center;
+    justify-content:center;
+    padding:20px;
+    text-align:center;
+  }
+  .phone-card{max-width:360px;width:100%;}
+  .phone-title{
+    font-family:var(--serif);
+    font-size:22px;
+    font-weight:700;
+    margin-bottom:14px;
+  }
+  #phoneConnectSpinner{
+    width:34px; height:34px;
+    margin:22px auto 4px;
+    border:3px solid var(--line);
+    border-top-color:var(--stamp-blue);
+    border-radius:50%;
+    animation:phoneSpin .8s linear infinite;
+  }
+  @keyframes phoneSpin{ to{ transform:rotate(360deg); } }
+  #phoneSendStatus{
+    font-family:var(--mono);
+    font-size:12.5px;
+    color:var(--ink-soft);
+    line-height:1.5;
+  }
+  #phoneSendStatus.status-error{color:var(--stamp-red);}
+  #phoneSendStatus.status-ok{color:var(--stamp-green);}
+  #phoneActionButtons{
+    max-height:0;
+    opacity:0;
+    overflow:hidden;
+    transition:opacity .35s ease, max-height .35s ease;
+  }
+  #phoneActionButtons.ready{max-height:260px; opacity:1;}
+  .phone-btn{
+    display:block;
+    margin-top:18px;
+    padding:20px 24px;
+    background:var(--ink);
+    color:#fff;
+    font-family:var(--mono);
+    font-size:15px;
+    letter-spacing:1px;
+    text-transform:uppercase;
+    cursor:pointer;
+    border-radius:2px;
+  }
+  .phone-btn.alt{background:var(--stamp-blue);}
+  #phoneSentCount{margin-top:14px;font-family:var(--mono);font-size:11px;color:var(--ink-soft);}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="brand">
+      <div>
+        <h1>Form Clipper</h1>
+      </div>
+      <span class="stamp">Rev. B</span>
+    </div>
+    <div class="subtitle">Upload a scanned admission form.<br>Drag three boxes over the photo and both signatures, then save all three straight into a folder on your computer.</div>
+  </header>
+
+  <div class="upload-actions">
+    <button id="qrSendBtn">📱 Send from phone (QR code)</button>
+  </div>
+
+  <div class="panel" id="dropzone">
+    <div class="icon">&#128196;</div>
+    <p class="cta">Drop the scanned form here</p>
+    <p>or click to browse &mdash; JPG, PNG, or WEBP</p>
+    <input type="file" id="fileInput" accept="image/*">
+  </div>
+
+  <div id="workspace">
+    <div class="toolbar">
+      <div class="legend">
+        <span class="item"><span class="swatch sw-photo"></span>Passport photo</span>
+        <span class="item"><span class="swatch sw-student"></span>Student signature</span>
+        <span class="item"><span class="swatch sw-parent"></span>Parent / guardian signature</span>
+      </div>
+      <div style="display:flex; gap:10px;">
+        <button class="secondary" id="resetBtn">Reset boxes</button>
+        <button class="secondary" id="newFileBtn">Load a different scan</button>
+        <button id="cropAllBtn">Crop all three</button>
+      </div>
+    </div>
+
+    <div class="panel stage-outer">
+      <div id="stage">
+        <img id="baseImg" alt="Uploaded form">
+        <!-- boxes injected here -->
+      </div>
+    </div>
+
+    <div class="results" id="results"></div>
+
+    <div class="panel zip-bar" id="zipBar" style="display:none;">
+      <span class="zip-note" id="zipNote">3 crops ready.</span>
+      <button id="zipAllBtn">📁 Save all 3 to a folder</button>
+      <div id="changeFolderLink">📁 Change save folder</div>
+    </div>
+  </div>
+
+  <footer>Everything runs in your browser &mdash; the scan is never uploaded to a server.</footer>
+</div>
+
+<!-- Laptop side: QR modal -->
+<div id="qrModal" class="modal-overlay">
+  <div class="modal-panel">
+    <div class="modal-head"><span>Scan with your phone</span><button id="qrCloseBtn">&times;</button></div>
+    <div id="qrCanvasWrap"><canvas id="qrCanvas"></canvas></div>
+    <div id="qrStatus">Generating code…</div>
+  </div>
+</div>
+
+<!-- Phone side: takeover screen -->
+<div id="phoneSendOverlay">
+  <div class="phone-card">
+    <div class="phone-title">Send the form to your laptop</div>
+    <div id="phoneConnectSpinner"></div>
+    <div id="phoneSendStatus">Connecting…</div>
+    <div id="phoneActionButtons">
+      <label class="phone-btn" id="phoneCameraLabel">
+        📷 Take photo
+        <input type="file" id="phoneCameraInput" accept="image/*" capture="environment" style="display:none;">
+      </label>
+      <label class="phone-btn alt" id="phoneGalleryLabel">
+        🖼 Choose from gallery
+        <input type="file" id="phoneGalleryInput" accept="image/*" style="display:none;">
+      </label>
+    </div>
+    <div id="phoneSentCount"></div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrious@4.0.2/dist/qrious.min.js"></script>
+<script>
+(function(){
+  const dropzone = document.getElementById('dropzone');
+  const fileInput = document.getElementById('fileInput');
+  const workspace = document.getElementById('workspace');
+  const stage = document.getElementById('stage');
+  const baseImg = document.getElementById('baseImg');
+  const resultsEl = document.getElementById('results');
+  const cropAllBtn = document.getElementById('cropAllBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const newFileBtn = document.getElementById('newFileBtn');
+  const zipBar = document.getElementById('zipBar');
+  const zipNote = document.getElementById('zipNote');
+  const zipAllBtn = document.getElementById('zipAllBtn');
+  const changeFolderLink = document.getElementById('changeFolderLink');
+
+  // Box definitions: default position/size as fractions of image size,
+  // chosen to match a typical form layout (photo top-right, signatures near bottom).
+  const boxDefs = [
+    { key:'photo',   label:'Passport photo',   cls:'box-photo',   x:0.72, y:0.03, w:0.24, h:0.28 },
+    { key:'student', label:'Student signature', cls:'box-student', x:0.06, y:0.82, w:0.34, h:0.12 },
+    { key:'parent',  label:'Parent signature',  cls:'box-parent',  x:0.55, y:0.82, w:0.34, h:0.12 },
+  ];
+
+  let boxState = {}; // key -> {x,y,w,h} in fractions
+  let naturalW = 0, naturalH = 0;
+  let lastCrops = null; // {key -> jpeg blob, sized 20-100KB} once "Crop all three" has run
+
+  function resetBoxState(){
+    boxState = {};
+    boxDefs.forEach(d => boxState[d.key] = { x:d.x, y:d.y, w:d.w, h:d.h });
+  }
+  resetBoxState();
+
+  function loadImageSrc(src){
+    baseImg.src = src;
+    baseImg.onload = () => {
+      naturalW = baseImg.naturalWidth;
+      naturalH = baseImg.naturalHeight;
+      resetBoxState();
+      dropzone.style.display = 'none';
+      workspace.style.display = 'block';
+      renderBoxes();
+      resultsEl.innerHTML = '';
+      zipBar.style.display = 'none';
+      lastCrops = null;
+    };
+  }
+
+  function loadFile(file){
+    if (!file || !file.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = (e) => loadImageSrc(e.target.result);
+    reader.readAsDataURL(file);
+  }
+
+  dropzone.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', (e) => loadFile(e.target.files[0]));
+
+  ['dragover','dragenter'].forEach(evt => dropzone.addEventListener(evt, (e) => {
+    e.preventDefault(); dropzone.classList.add('drag');
+  }));
+  ['dragleave','drop'].forEach(evt => dropzone.addEventListener(evt, (e) => {
+    e.preventDefault(); dropzone.classList.remove('drag');
+  }));
+  dropzone.addEventListener('drop', (e) => {
+    const file = e.dataTransfer.files[0];
+    loadFile(file);
+  });
+
+  newFileBtn.addEventListener('click', () => {
+    workspace.style.display = 'none';
+    dropzone.style.display = 'block';
+    fileInput.value = '';
+  });
+
+  resetBtn.addEventListener('click', () => {
+    resetBoxState();
+    renderBoxes();
+  });
+
+  function renderBoxes(){
+    stage.querySelectorAll('.box').forEach(b => b.remove());
+
+    boxDefs.forEach(def => {
+      const st = boxState[def.key];
+      const box = document.createElement('div');
+      box.className = 'box ' + def.cls;
+      box.dataset.key = def.key;
+
+      const label = document.createElement('div');
+      label.className = 'label';
+      label.textContent = def.label;
+      box.appendChild(label);
+
+      const handle = document.createElement('div');
+      handle.className = 'handle';
+      box.appendChild(handle);
+
+      stage.appendChild(box);
+      positionBox(box, st);
+      attachDrag(box, handle, def.key);
+    });
+  }
+
+  function positionBox(box, st){
+    box.style.left = (st.x * 100) + '%';
+    box.style.top = (st.y * 100) + '%';
+    box.style.width = (st.w * 100) + '%';
+    box.style.height = (st.h * 100) + '%';
+  }
+
+  function attachDrag(box, handle, key){
+    let mode = null;
+    let startX, startY, startState;
+
+    function getStagePx(){
+      const r = stage.getBoundingClientRect();
+      return { w:r.width, h:r.height };
+    }
+
+    function onMove(e){
+      if (!mode) return;
+      const p = getStagePx();
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      const dx = (clientX - startX) / p.w;
+      const dy = (clientY - startY) / p.h;
+      const st = boxState[key];
+
+      if (mode === 'move'){
+        st.x = clamp(startState.x + dx, 0, 1 - st.w);
+        st.y = clamp(startState.y + dy, 0, 1 - st.h);
+      } else if (mode === 'resize'){
+        st.w = clamp(startState.w + dx, 0.03, 1 - st.x);
+        st.h = clamp(startState.h + dy, 0.03, 1 - st.y);
+      }
+      positionBox(box, st);
+      e.preventDefault();
+    }
+
+    function onUp(){
+      mode = null;
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      window.removeEventListener('touchmove', onMove);
+      window.removeEventListener('touchend', onUp);
+    }
+
+    function startDrag(e, m){
+      mode = m;
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      startX = clientX; startY = clientY;
+      startState = Object.assign({}, boxState[key]);
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onUp);
+      window.addEventListener('touchmove', onMove, {passive:false});
+      window.addEventListener('touchend', onUp);
+      e.preventDefault();
+      e.stopPropagation();
+    }
+
+    box.addEventListener('mousedown', (e) => startDrag(e, 'move'));
+    box.addEventListener('touchstart', (e) => startDrag(e, 'move'), {passive:false});
+    handle.addEventListener('mousedown', (e) => startDrag(e, 'resize'));
+    handle.addEventListener('touchstart', (e) => startDrag(e, 'resize'), {passive:false});
+  }
+
+  function clamp(v, min, max){
+    if (max < min) max = min;
+    return Math.min(Math.max(v, min), max);
+  }
+
+  function cropToCanvas(def){
+    const st = boxState[def.key];
+    const sx = st.x * naturalW;
+    const sy = st.y * naturalH;
+    const sw = st.w * naturalW;
+    const sh = st.h * naturalH;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(sw);
+    canvas.height = Math.round(sh);
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(baseImg, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+    return canvas;
+  }
+
+  // ---------- fit every crop into the 20KB–100KB range (JPEG) ----------
+  const MIN_KB = 20, MAX_KB = 100;
+
+  function jpegAt(canvas, quality){
+    return new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', quality));
+  }
+
+  // Pads a JPEG by inserting invisible COM (comment) marker segments right
+  // after the SOI marker — no pixel is touched, viewers ignore comments.
+  // Only used on the rare crop that's naturally under the 20KB floor.
+  function padJpeg(bytes, targetBytes){
+    let needed = targetBytes - bytes.length;
+    if (needed <= 4) return bytes;
+    const segments = [];
+    while (needed > 4){
+      const payloadLen = Math.min(needed - 4, 65000);
+      if (payloadLen <= 0) break;
+      const segLen = payloadLen + 2;
+      const seg = new Uint8Array(4 + payloadLen);
+      seg[0] = 0xFF; seg[1] = 0xFE;
+      seg[2] = (segLen >> 8) & 0xFF; seg[3] = segLen & 0xFF;
+      segments.push(seg);
+      needed -= seg.length;
+    }
+    const extra = segments.reduce((s,a) => s + a.length, 0);
+    const out = new Uint8Array(bytes.length + extra);
+    out[0] = bytes[0]; out[1] = bytes[1]; // FF D8 (SOI)
+    let off = 2;
+    for (const seg of segments){ out.set(seg, off); off += seg.length; }
+    out.set(bytes.subarray(2), off);
+    return out;
+  }
+
+  // Binary-searches JPEG quality to land under MAX_KB; if even the lowest
+  // quality is still too big, shrinks the pixel dimensions and tries again.
+  async function compressToRange(sourceCanvas){
+    let workCanvas = sourceCanvas;
+    for (let resizeAttempt = 0; resizeAttempt < 6; resizeAttempt++){
+      let lo = 0.05, hi = 0.95, best = null;
+      for (let i = 0; i < 8; i++){
+        const q = (lo + hi) / 2;
+        const blob = await jpegAt(workCanvas, q);
+        if (blob.size / 1024 <= MAX_KB){ best = blob; lo = q; } else { hi = q; }
+      }
+      if (best){
+        if (best.size / 1024 >= MIN_KB) return { blob: best, canvas: workCanvas, padded: false };
+        // under the floor — pad with invisible bytes rather than lose quality further
+        const targetBytes = Math.min(Math.ceil(MIN_KB * 1024) + 256, Math.floor(MAX_KB * 1024));
+        const bytes = new Uint8Array(await best.arrayBuffer());
+        const paddedBytes = padJpeg(bytes, targetBytes);
+        return { blob: new Blob([paddedBytes], {type:'image/jpeg'}), canvas: workCanvas, padded: true };
+      }
+      // even quality 0.05 exceeds MAX_KB — shrink pixel dimensions and retry
+      const nc = document.createElement('canvas');
+      nc.width = Math.max(24, Math.round(workCanvas.width * 0.82));
+      nc.height = Math.max(24, Math.round(workCanvas.height * 0.82));
+      nc.getContext('2d').drawImage(workCanvas, 0, 0, nc.width, nc.height);
+      workCanvas = nc;
+    }
+    const blob = await jpegAt(workCanvas, 0.05);
+    return { blob, canvas: workCanvas, padded: false };
+  }
+
+  function buildResultCard(def, canvas, blob, padded){
+    const card = document.createElement('div');
+    card.className = 'panel result-card';
+
+    const h3 = document.createElement('h3');
+    h3.textContent = def.label;
+    card.appendChild(h3);
+
+    const img = document.createElement('img');
+    img.src = URL.createObjectURL(blob);
+    img.style.maxWidth = '100%';
+    img.style.border = '1px solid var(--line)';
+    card.appendChild(img);
+
+    const kb = blob.size / 1024;
+    const sizeNote = document.createElement('div');
+    sizeNote.style.fontFamily = 'var(--mono)';
+    sizeNote.style.fontSize = '11px';
+    sizeNote.style.marginTop = '8px';
+    sizeNote.style.color = 'var(--stamp-green)';
+    sizeNote.textContent = `${kb.toFixed(1)} KB ✓ within ${MIN_KB}–${MAX_KB}KB` + (padded ? ' (padded to reach the minimum — image itself is unchanged)' : '');
+    card.appendChild(sizeNote);
+
+    const dlBtn = document.createElement('button');
+    dlBtn.className = 'secondary';
+    dlBtn.textContent = 'Download this one';
+    dlBtn.addEventListener('click', () => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = def.key + '.jpg';
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+    card.appendChild(dlBtn);
+    return card;
+  }
+
+  cropAllBtn.addEventListener('click', async () => {
+    resultsEl.innerHTML = '';
+    lastCrops = {};
+    cropAllBtn.disabled = true;
+    cropAllBtn.textContent = 'Sizing to 20–100KB…';
+    for (const def of boxDefs){
+      const rawCanvas = cropToCanvas(def);
+      const { blob, canvas, padded } = await compressToRange(rawCanvas);
+      lastCrops[def.key] = blob;
+      resultsEl.appendChild(buildResultCard(def, canvas, blob, padded));
+    }
+    cropAllBtn.disabled = false;
+    cropAllBtn.textContent = 'Crop all three';
+    zipNote.textContent = '3 crops ready, each sized 20–100KB — passport photo, student signature, parent signature.';
+    zipBar.style.display = 'flex';
+    zipBar.scrollIntoView({ behavior:'smooth', block:'start' });
+  });
+
+  // ---------- save straight to a real folder on disk ----------
+  // Remembers the chosen folder across visits (IndexedDB, since folder
+  // handles can't be stored in localStorage) so the picker only appears once.
+  const DB_NAME = 'formclipper-db', STORE_NAME = 'handles';
+  function openDB(){
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB_NAME, 1);
+      req.onupgradeneeded = () => { req.result.createObjectStore(STORE_NAME); };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+  async function idbGet(key){
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readonly');
+      const req = tx.objectStore(STORE_NAME).get(key);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+  async function idbSet(key, val){
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      tx.objectStore(STORE_NAME).put(val, key);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
+  async function getSaveFolder(forcePrompt){
+    if (!window.showDirectoryPicker) return null; // Safari/Firefox — falls back to plain downloads
+    if (!forcePrompt){
+      try{
+        const saved = await idbGet('saveDir');
+        if (saved){
+          let perm = await saved.queryPermission({mode:'readwrite'});
+          if (perm !== 'granted') perm = await saved.requestPermission({mode:'readwrite'});
+          if (perm === 'granted') return saved;
+        }
+      } catch(e){ /* saved handle no longer valid — ask again below */ }
+    }
+    try{
+      const handle = await window.showDirectoryPicker({mode:'readwrite'});
+      await idbSet('saveDir', handle);
+      return handle;
+    } catch(e){
+      return null; // user cancelled the picker
+    }
+  }
+
+  changeFolderLink.addEventListener('click', async () => {
+    const handle = await getSaveFolder(true);
+    if (handle) zipNote.textContent = 'Save folder updated ✓ — next save will go straight there, no prompt.';
+  });
+
+  zipAllBtn.addEventListener('click', async () => {
+    if (!lastCrops) return;
+    zipAllBtn.disabled = true;
+    zipAllBtn.textContent = 'Saving…';
+    try{
+      const named = boxDefs.map(def => ({ name: def.key + '.jpg', blob: lastCrops[def.key] }));
+
+      const dirHandle = await getSaveFolder(false);
+
+      if (dirHandle){
+        // Real "Save As" folder: writes the three files directly onto disk,
+        // in a dated subfolder so repeat runs don't overwrite each other.
+        const stamp = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-');
+        const subfolderName = `form-crops-${stamp}`;
+        const subDir = await dirHandle.getDirectoryHandle(subfolderName, {create:true});
+        for (const f of named){
+          const fileHandle = await subDir.getFileHandle(f.name, {create:true});
+          const writable = await fileHandle.createWritable();
+          await writable.write(f.blob);
+          await writable.close();
+        }
+        zipNote.textContent = `Saved to folder "${subfolderName}" ✓`;
+        changeFolderLink.style.display = 'block';
+      } else {
+        // Fallback for browsers without folder-write support (e.g. Safari,
+        // Firefox): just downloads the three files individually.
+        for (const f of named){
+          const url = URL.createObjectURL(f.blob);
+          const a = document.createElement('a');
+          a.href = url; a.download = f.name;
+          document.body.appendChild(a); a.click(); a.remove();
+          await new Promise(r => setTimeout(r, 400));
+          URL.revokeObjectURL(url);
+        }
+        zipNote.textContent = 'Your browser doesn\'t support saving straight into a folder, so the 3 files were downloaded individually instead.';
+      }
+    } catch(err){
+      zipNote.textContent = 'Save was cancelled or failed — try again.';
+    } finally {
+      zipAllBtn.disabled = false;
+      zipAllBtn.textContent = '📁 Save all 3 to a folder';
+    }
+  });
+
+  // ================= phone → laptop transfer (WebRTC via PeerJS) =================
+  const qrSendBtn = document.getElementById('qrSendBtn');
+  const qrModal = document.getElementById('qrModal');
+  const qrCloseBtn = document.getElementById('qrCloseBtn');
+  const qrCanvas = document.getElementById('qrCanvas');
+  const qrStatus = document.getElementById('qrStatus');
+  const phoneSendOverlay = document.getElementById('phoneSendOverlay');
+  const phoneSendStatus = document.getElementById('phoneSendStatus');
+  const phoneConnectSpinner = document.getElementById('phoneConnectSpinner');
+  const phoneActionButtons = document.getElementById('phoneActionButtons');
+  const phoneCameraInput = document.getElementById('phoneCameraInput');
+  const phoneGalleryInput = document.getElementById('phoneGalleryInput');
+  const phoneSentCount = document.getElementById('phoneSentCount');
+
+  const urlParams = new URLSearchParams(location.search);
+  const sendToPeerId = urlParams.get('send');
+
+  const ICE_CONFIG = {
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun.l.google.com:5349' },
+      { urls: 'stun:stun1.l.google.com:3478' },
+      { urls: 'stun:stun.cloudflare.com:3478' },
+      { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+      { urls: 'turn:openrelay.metered.ca:80?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
+      { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+      { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
+    ]
+  };
+  async function getIceConfig(){ return ICE_CONFIG; }
+
+  if (typeof Peer === 'undefined'){
+    if (qrSendBtn){
+      qrSendBtn.disabled = true;
+      qrSendBtn.title = 'Connection library failed to load — check your internet connection.';
+    }
+  } else if (sendToPeerId){
+    // ---- THIS DEVICE IS THE PHONE (sender mode) ----
+    document.body.classList.add('phone-mode');
+    phoneSendOverlay.style.display = 'flex';
+
+    let sentCount = 0;
+    let conn = null;
+    let myPeer = null;
+    let reconnectTimer = null;
+    let reconnectDelay = 1500;
+    const pending = [];
+
+    function setStatus(text, kind){
+      phoneSendStatus.textContent = text;
+      phoneSendStatus.classList.remove('status-error','status-ok');
+      if (kind) phoneSendStatus.classList.add('status-' + kind);
+    }
+
+    let everConnected = false;
+    function showActionButtons(){
+      everConnected = true;
+      phoneConnectSpinner.style.display = 'none';
+      phoneActionButtons.classList.add('ready');
+    }
+
+    function flushPending(){
+      if (!conn || !conn.open || !pending.length) return;
+      let inFlight = 0;
+      pending.forEach(item => {
+        if (item.tries > 0){ inFlight++; return; }
+        item.tries++;
+        conn.send({ type:'photo', id:item.id, meta:item.meta, buf:item.buf });
+        inFlight++;
+      });
+      if (inFlight) setStatus(`Sending ${inFlight} photo${inFlight===1?'':'s'}…`);
+    }
+
+    function scheduleReconnect(){
+      pending.forEach(p => { p.tries = 0; });
+      if (reconnectTimer) return;
+      setStatus(pending.length ? `Connection dropped — reconnecting to resend ${pending.length} photo${pending.length===1?'':'s'}…` : 'Connection dropped — reconnecting…');
+      reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
+        connectToLaptop();
+      }, reconnectDelay);
+      reconnectDelay = Math.min(reconnectDelay * 1.5, 8000);
+    }
+
+    function dial(){
+      if (conn && conn.open) return;
+      conn = myPeer.connect(sendToPeerId, {reliable:true});
+      let slowTimer = setTimeout(() => {
+        if (conn && !conn.open) setStatus('Still connecting… make sure your phone and laptop are on the same Wi-Fi.');
+      }, 6000);
+      let connectTimeout = setTimeout(() => {
+        if (conn && !conn.open){
+          setStatus("Still can't reach the laptop — put your phone on the SAME Wi-Fi as your laptop, then rescan the QR code.", 'error');
+        }
+      }, 15000);
+      conn.on('open', () => {
+        clearTimeout(slowTimer); clearTimeout(connectTimeout);
+        reconnectDelay = 1500;
+        showActionButtons();
+        setStatus(pending.length ? `Reconnected ✓ — resending ${pending.length} photo${pending.length===1?'':'s'}…` : 'Connected to laptop ✓ — take or choose the scan below.', 'ok');
+        flushPending();
+      });
+      conn.on('data', (data) => {
+        if (data && data.type === 'ack'){
+          const idx = pending.findIndex(p => p.id === data.id);
+          if (idx !== -1) pending.splice(idx,1);
+          sentCount++;
+          phoneSentCount.textContent = `${sentCount} photo${sentCount===1?'':'s'} sent this session.`;
+          setStatus(pending.length ? `Sent ✓ — ${pending.length} more sending…` : 'Sent ✓ — check your laptop.', 'ok');
+        }
+      });
+      conn.on('close', () => { clearTimeout(slowTimer); clearTimeout(connectTimeout); scheduleReconnect(); });
+      conn.on('error', () => { clearTimeout(slowTimer); clearTimeout(connectTimeout); scheduleReconnect(); });
+    }
+
+    function connectToLaptop(){
+      if (!myPeer || myPeer.destroyed){
+        myPeer = 'connecting';
+        getIceConfig().then(cfg => {
+          myPeer = new Peer(undefined, { config: cfg });
+          myPeer.on('open', dial);
+          myPeer.on('disconnected', () => { if (!myPeer.destroyed) myPeer.reconnect(); });
+          myPeer.on('close', scheduleReconnect);
+          myPeer.on('error', (err) => {
+            setStatus('Could not reach laptop (' + err.type + ') — retrying…', 'error');
+            scheduleReconnect();
+          });
+        });
+      } else if (myPeer.open){
+        dial();
+      }
+    }
+    connectToLaptop();
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && (!conn || !conn.open)){
+        reconnectDelay = 1500;
+        connectToLaptop();
+      }
+    });
+
+    const MAX_SEND_BYTES = 1024 * 1024;
+    async function compressImage(file){
+      if (!file.type || !file.type.startsWith('image/') || file.size <= MAX_SEND_BYTES) return file;
+      let img;
+      try{
+        const url = URL.createObjectURL(file);
+        img = await new Promise((resolve, reject) => {
+          const im = new Image();
+          im.onload = () => resolve(im);
+          im.onerror = reject;
+          im.src = url;
+        });
+        URL.revokeObjectURL(url);
+      } catch(e){ return file; }
+
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      let maxDim = 2200; // keep form scans reasonably crisp for cropping
+      let quality = 0.85;
+      let blob = null;
+
+      for (let attempt = 0; attempt < 6; attempt++){
+        let w = img.naturalWidth, h = img.naturalHeight;
+        if (Math.max(w, h) > maxDim){
+          const scale = maxDim / Math.max(w, h);
+          w = Math.round(w * scale); h = Math.round(h * scale);
+        }
+        canvas.width = w; canvas.height = h;
+        ctx.clearRect(0,0,w,h);
+        ctx.drawImage(img, 0, 0, w, h);
+        blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', quality));
+        if (blob && blob.size <= MAX_SEND_BYTES) break;
+        quality = Math.max(0.4, quality - 0.12);
+        maxDim = Math.round(maxDim * 0.85);
+      }
+      return blob || file;
+    }
+
+    async function sendFile(file){
+      if (!file) return;
+      let toSend = file;
+      if (file.size > MAX_SEND_BYTES){
+        setStatus('Compressing photo…');
+        toSend = await compressImage(file);
+      }
+      const id = Date.now() + '-' + Math.random().toString(36).slice(2,8);
+      const buf = await toSend.arrayBuffer();
+      pending.push({ id, meta:{ name:file.name || 'form-scan.jpg', type: toSend.type || 'image/jpeg' }, buf, tries:0 });
+      if (conn && conn.open) flushPending();
+      else { setStatus('Not connected — will send automatically once reconnected…'); connectToLaptop(); }
+    }
+
+    phoneCameraInput.addEventListener('change', () => {
+      sendFile(phoneCameraInput.files[0]);
+      phoneCameraInput.value = '';
+    });
+    phoneGalleryInput.addEventListener('change', () => {
+      sendFile(phoneGalleryInput.files[0]);
+      phoneGalleryInput.value = '';
+    });
+
+  } else {
+    // ---- THIS DEVICE IS THE LAPTOP (receiver mode) ----
+    let hostPeer = null;
+    let receivedCount = 0;
+    const seenIds = new Set();
+    let connecting = false;
+
+    qrSendBtn.addEventListener('click', async () => {
+      qrModal.style.display = 'flex';
+      if (hostPeer || connecting) return;
+      connecting = true;
+      qrStatus.textContent = 'Generating code…';
+      const cfg = await getIceConfig();
+      hostPeer = new Peer(undefined, { config: cfg });
+
+      hostPeer.on('open', (id) => {
+        const link = location.origin + location.pathname + '?send=' + id;
+        new QRious({ element: qrCanvas, value: link, size: 220 });
+        qrStatus.textContent = "Scan with your phone's camera app, then take or choose the scanned form there.";
+        setTimeout(() => {
+          if (!qrStatus.textContent.startsWith('Phone connected') && !qrStatus.textContent.startsWith('Received')){
+            qrStatus.textContent = "Still waiting for the phone… make sure it's on the SAME Wi-Fi as this laptop, then rescan.";
+          }
+        }, 20000);
+      });
+
+      hostPeer.on('disconnected', () => {
+        qrStatus.textContent = 'Reconnecting…';
+        if (!hostPeer.destroyed) hostPeer.reconnect();
+      });
+
+      hostPeer.on('connection', (conn) => {
+        qrStatus.textContent = 'Phone connected ✓ — waiting for the photo…';
+        conn.on('data', (data) => {
+          if (data && data.type === 'photo' && data.meta && data.buf){
+            conn.send({ type:'ack', id: data.id });
+            if (seenIds.has(data.id)) return;
+            seenIds.add(data.id);
+            const blob = new Blob([data.buf], {type:data.meta.type || 'image/jpeg'});
+            receivedCount++;
+            qrStatus.textContent = `Received the scan from your phone ✓ — loading it now.`;
+            const url = URL.createObjectURL(blob);
+            loadImageSrc(url);
+            setTimeout(() => { qrModal.style.display = 'none'; }, 700);
+          }
+        });
+        conn.on('close', () => {
+          qrStatus.textContent = 'Phone disconnected — it will reconnect automatically if it comes back online.';
+        });
+      });
+
+      hostPeer.on('error', (err) => {
+        qrStatus.textContent = 'Connection service unavailable (' + err.type + '). Check your internet connection.';
+      });
+    });
+
+    qrCloseBtn.addEventListener('click', () => { qrModal.style.display = 'none'; });
+  }
+
+})();
+</script>
+</body>
+</html>
